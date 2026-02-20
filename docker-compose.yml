@@ -36,9 +36,6 @@ services:
     networks:
       - dokploy-network
       - shared-services
-    depends_on:
-      postgres-init:
-        condition: service_completed_successfully
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
