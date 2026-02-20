@@ -1,62 +1,18 @@
-version: '3.8'
-
 services:
-  # === Inicialización de Usuario y BD ===
-  postgres-init:
-    image: postgres:15
-    container_name: signato-db-init
-    restart: "no"
-    environment:
-      PGPASSWORD: ${POSTGRES_ROOT_PASSWORD}
-    command: >
-      bash -c "
-        echo '⏳ Esperando PostgreSQL...';
-        until pg_isready -h central-postgres -U ${POSTGRES_ROOT_USER}; do
-          sleep 2;
-        done;
-        echo '✅ PostgreSQL listo';
-        
-        echo '👤 Creando usuario signato_user...';
-        psql -h central-postgres -U ${POSTGRES_ROOT_USER} -d postgres -tc \"SELECT 1 FROM pg_roles WHERE rolname = 'signato_user'\" | grep -q 1 || \
-        psql -h central-postgres -U ${POSTGRES_ROOT_USER} -d postgres -c \"CREATE USER signato_user WITH PASSWORD '${SIGNATO_DB_PASSWORD}'\";
-        
-        echo '📊 Creando base de datos signato...';
-        psql -h central-postgres -U ${POSTGRES_ROOT_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'signato'\" | grep -q 1 || \
-        psql -h central-postgres -U ${POSTGRES_ROOT_USER} -d postgres -c \"CREATE DATABASE signato OWNER signato_user\";
-        
-        echo '🔐 Configurando permisos...';
-        psql -h central-postgres -U ${POSTGRES_ROOT_USER} -d postgres -c \"GRANT ALL PRIVILEGES ON DATABASE signato TO signato_user\";
-        
-        echo '✨ Base de datos signato lista para usar';
-      "
-    networks:
-      - shared-services
-
-  # === Aplicación Signato (Documenso) ===
   signato:
     image: documenso/documenso:latest
-    container_name: signato-app
     restart: unless-stopped
     environment:
-      # === Database ===
       NEXT_PRIVATE_DATABASE_URL: postgresql://signato_user:${SIGNATO_DB_PASSWORD}@central-postgres:5432/signato
       NEXT_PRIVATE_DIRECT_DATABASE_URL: postgresql://signato_user:${SIGNATO_DB_PASSWORD}@central-postgres:5432/signato
-      
-      # === URLs ===
       NEXT_PUBLIC_WEBAPP_URL: https://documenso.2asoft.tech
       NEXTAUTH_URL: https://documenso.2asoft.tech
       NEXT_PUBLIC_MARKETING_URL: https://documenso.2asoft.tech
-      
-      # === Security ===
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXT_PRIVATE_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       NEXT_PRIVATE_ENCRYPTION_SECONDARY_KEY: ${ENCRYPTION_SECONDARY_KEY}
-
-      # === Signing Certificate ===
       NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: /opt/documenso/cert.p12
       NEXT_PRIVATE_SIGNING_PASSPHRASE: ${SIGNING_PASSPHRASE}
-      
-      # === SMTP (usando mail.2asoft.tech) ===
       NEXT_PRIVATE_SMTP_TRANSPORT: smtp-auth
       NEXT_PRIVATE_SMTP_HOST: mail.2asoft.tech
       NEXT_PRIVATE_SMTP_PORT: 587
@@ -65,8 +21,6 @@ services:
       NEXT_PRIVATE_SMTP_FROM_ADDRESS: contacto@2asoft.tech
       NEXT_PRIVATE_SMTP_FROM_NAME: Trustgate - Firma segura
       NEXT_PRIVATE_SMTP_SECURE: false
-      
-      # === Storage S3 (MinIO) ===
       NEXT_PRIVATE_UPLOAD_TRANSPORT: s3
       NEXT_PRIVATE_UPLOAD_ENDPOINT: https://s3.2asoft.tech
       NEXT_PRIVATE_UPLOAD_FORCE_PATH_STYLE: true
@@ -74,38 +28,25 @@ services:
       NEXT_PRIVATE_UPLOAD_BUCKET: signato
       NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      
-      # === Features ===
       DOCUMENSO_DISABLE_TELEMETRY: true
       NEXT_PUBLIC_DISABLE_SIGNUP: true
-      
-      # === Timezone ===
       TZ: America/Bogota
-      
     volumes:
-      # Certificado de firma digital
-      - ./cert.p12:/opt/documenso/cert.p12:ro
-      
+      - /root/apps/signato/cert.p12:/opt/documenso/cert.p12:ro
     networks:
-      - web
+      - dokploy-network
       - shared-services
-      
     depends_on:
       postgres-init:
         condition: service_completed_successfully
-      
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=web"
-      
-      # === HTTPS Router ===
+      - "traefik.docker.network=dokploy-network"
       - "traefik.http.routers.signato-secure.rule=Host(`documenso.2asoft.tech`)"
       - "traefik.http.routers.signato-secure.entrypoints=websecure"
       - "traefik.http.routers.signato-secure.tls.certresolver=letsencrypt"
       - "traefik.http.routers.signato-secure.service=signato"
       - "traefik.http.services.signato.loadbalancer.server.port=3000"
-      
-      # === HTTP Redirect ===
       - "traefik.http.routers.signato.rule=Host(`documenso.2asoft.tech`)"
       - "traefik.http.routers.signato.entrypoints=web"
       - "traefik.http.routers.signato.middlewares=signato-redirect"
@@ -113,7 +54,7 @@ services:
       - "traefik.http.middlewares.signato-redirect.redirectscheme.permanent=true"
 
 networks:
-  web:
+  dokploy-network:
     external: true
   shared-services:
     external: true
