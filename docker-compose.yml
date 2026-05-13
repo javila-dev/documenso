@@ -29,7 +29,7 @@ services:
       NEXT_PRIVATE_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       NEXT_PRIVATE_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       DOCUMENSO_DISABLE_TELEMETRY: true
-      NEXT_PUBLIC_DISABLE_SIGNUP: true
+      NEXT_PUBLIC_DISABLE_SIGNUP: false
       TZ: America/Bogota
     volumes:
       - /root/apps/signato/cert.p12:/opt/documenso/cert.p12:ro
